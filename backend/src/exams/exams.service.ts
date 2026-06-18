@@ -99,10 +99,6 @@ export class ExamsService {
 
   async update(id: string, updateExamDto: CreateExamDto, lecturerId: string, institutionId?: string) {
     const exam = await this.findOne(id, lecturerId);
-    
-    if (exam.status !== 'DRAFT') {
-      throw new ForbiddenException('You can only update draft exams');
-    }
 
     return this.prisma.$transaction(async (prisma) => {
       // Update the exam itself
@@ -121,6 +117,7 @@ export class ExamsService {
           shuffleQuestions: updateExamDto.shuffleQuestions,
           shuffleOptions: updateExamDto.shuffleOptions,
           lockAfterSubmit: updateExamDto.lockAfterSubmit,
+          status: 'DRAFT', // Revert status back to DRAFT so it can be adjusted and republished
         },
       });
 

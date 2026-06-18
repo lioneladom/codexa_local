@@ -247,12 +247,44 @@ export default function ExamsPage() {
                     </>
                   )}
                   {exam.status === 'PUBLISHED' && (
-                    <Link
-                      href={`/dashboard/exams/${exam.id}/monitor`}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-semibold transition-all shadow-sm"
-                    >
-                      Monitor Exam
-                    </Link>
+                    <>
+                      <Link
+                        href={`/dashboard/exams/${exam.id}/monitor`}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-semibold transition-all shadow-sm"
+                      >
+                        Monitor Exam
+                      </Link>
+                      <Link
+                        href={`/dashboard/exams/create?edit=${exam.id}`}
+                        className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-xs font-semibold transition-all shadow-sm"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => setShowDeleteConfirm(exam.id)}
+                        disabled={deleteLoading === exam.id}
+                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-xs font-semibold transition-all shadow-sm"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                  {exam.status === 'ARCHIVED' && (
+                    <>
+                      <Link
+                        href={`/dashboard/exams/create?edit=${exam.id}`}
+                        className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-xs font-semibold transition-all shadow-sm"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => setShowDeleteConfirm(exam.id)}
+                        disabled={deleteLoading === exam.id}
+                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 text-xs font-semibold transition-all shadow-sm"
+                      >
+                        Delete
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
