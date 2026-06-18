@@ -510,14 +510,17 @@ function CreateExamInner() {
                 rows={4}
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Exam Date *</label>
                 <input
                   type="date"
                   value={examData.examDate}
                   onChange={(e) => setExamData({ ...examData, examDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  onClick={(e) => {
+                    try { e.currentTarget.showPicker(); } catch (err) {}
+                  }}
+                  className="w-full px-4 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                   required
                 />
               </div>
@@ -527,7 +530,10 @@ function CreateExamInner() {
                   type="time"
                   value={examData.startTime}
                   onChange={(e) => setExamData({ ...examData, startTime: e.target.value })}
-                  className="w-full px-4 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  onClick={(e) => {
+                    try { e.currentTarget.showPicker(); } catch (err) {}
+                  }}
+                  className="w-full px-4 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                   required
                 />
               </div>
@@ -537,7 +543,10 @@ function CreateExamInner() {
                   type="time"
                   value={examData.endTime}
                   onChange={(e) => setExamData({ ...examData, endTime: e.target.value })}
-                  className="w-full px-4 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  onClick={(e) => {
+                    try { e.currentTarget.showPicker(); } catch (err) {}
+                  }}
+                  className="w-full px-4 py-2 border border-border rounded-md bg-input text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer [&::-webkit-calendar-picker-indicator]:dark:invert"
                   required
                 />
               </div>

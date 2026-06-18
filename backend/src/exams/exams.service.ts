@@ -9,6 +9,8 @@ import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class ExamsService {
+  private lastAutoExpireCheck = 0;
+
   constructor(
     private prisma: PrismaService,
     private executionService: ExecutionService,
@@ -857,6 +859,12 @@ export class ExamsService {
   }
 
   async autoExpireExams() {
+    const nowMs = Date.now();
+    if (nowMs - this.lastAutoExpireCheck < 30000) {
+      return;
+    }
+    this.lastAutoExpireCheck = nowMs;
+
     const now = new Date();
     await this.prisma.exam.updateMany({
       where: {
