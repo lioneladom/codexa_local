@@ -74,7 +74,31 @@ echo "Waiting for servers to start..."
 sleep 4
 
 # 6. Get local IP address to show the lecturer
-LOCAL_IP=$(hostname -I | awk '{print $1}')
+# Find the interface with the default route first (handles internet-connected local networks)
+DEFAULT_INTERFACE=$(ip route show | grep default | head -n 1 | awk '{print $5}')
+LOCAL_IP=""
+if [ -n "$DEFAULT_INTERFACE" ]; then
+    LOCAL_IP=$(ip -4 addr show dev "$DEFAULT_INTERFACE" | grep -oP 'inet \K[\d.]+' | head -n 1)
+fi
+
+# Fallback if no default route exists (e.g. offline router/hotspot with no gateway)
+if [ -z "$LOCAL_IP" ]; then
+    # Find active non-virtual interfaces (wlan, eth, en, wl)
+    for iface in $(ip -o link show | awk -F': ' '{print $2}' | grep -E '^(wlan|wlp|eth|enp|en|wl)'); do
+        if ip link show "$iface" 2>/dev/null | grep -q "state UP"; then
+            LOCAL_IP=$(ip -4 addr show dev "$iface" | grep -oP 'inet \K[\d.]+' | head -n 1)
+            if [ -n "$LOCAL_IP" ]; then
+                break
+            fi
+        fi
+    done
+fi
+
+# Absolute fallback
+if [ -z "$LOCAL_IP" ]; then
+    LOCAL_IP=$(hostname -I | awk '{print $1}')
+fi
+
 echo "============================================="
 echo "Codexa is now running!"
 echo "Lecturer Dashboard: http://localhost:3000"

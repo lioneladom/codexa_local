@@ -88,7 +88,7 @@ export default function DashboardPage() {
   return (
     <div className="p-8">
       {/* Welcome Header */}
-      <div className="flex justify-between items-center mb-8 bg-[#0a0f24] text-[#ffffff] p-6 rounded-2xl border border-[#1e295d] shadow-[0_4px_20px_rgba(10,15,36,0.15)] relative overflow-hidden">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center mb-8 bg-[#0a0f24] text-[#ffffff] p-6 rounded-2xl border border-[#1e295d] shadow-[0_4px_20px_rgba(10,15,36,0.15)] relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent"></div>
         <div>
           <h1 className="text-3xl font-bold font-sans">
@@ -100,7 +100,7 @@ export default function DashboardPage() {
         </div>
         <Link
           href="/dashboard/exams/create"
-          className="bg-accent hover:bg-accent/90 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-[0_4px_12px_rgba(23,128,115,0.2)]"
+          className="bg-accent hover:bg-accent/90 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-[0_4px_12px_rgba(23,128,115,0.2)] text-center w-full sm:w-auto"
         >
           + Create New Exam
         </Link>
@@ -167,14 +167,14 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y divide-[#e2e8f0]">
             {exams.map((exam) => (
-              <div key={exam.id} className="px-6 py-4 flex justify-between items-center hover:bg-slate-50/50 transition-all">
+              <div key={exam.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-all">
                 <div>
                   <h3 className="font-bold text-[#0a0f24]">{exam.title}</h3>
                   <p className="text-xs text-slate-500 mt-1 font-mono">
                     Course Code: {exam.courseCode} • Created: {new Date(exam.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between sm:justify-end gap-4">
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-semibold ${
                       exam.status === 'PUBLISHED'

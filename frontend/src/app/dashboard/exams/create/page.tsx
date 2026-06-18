@@ -46,6 +46,7 @@ interface QuestionBankItem {
   sampleOutput?: string;
   marks: number;
   createdAt: string;
+  testCases?: TestCase[];
 }
 
 interface Exam {
@@ -233,7 +234,13 @@ function CreateExamInner() {
       options: item.options ? JSON.parse(item.options) : [],
       correctOption: item.correctOption || '',
       language: item.language || 'javascript',
-      testCases: [],
+      testCases: item.testCases
+        ? item.testCases.map((tc) => ({
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            isHidden: tc.isHidden || false,
+          }))
+        : [],
     };
     setExamData({ ...examData, questions: [...examData.questions, newQuestion] });
     setShowQuestionBank(false);

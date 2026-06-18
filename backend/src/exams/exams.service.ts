@@ -178,6 +178,7 @@ export class ExamsService {
   }
 
   async findAll(lecturerId: string, institutionId?: string) {
+    await this.autoExpireExams();
     // Return only minimal data for dashboard/exam list
     const exams = await this.prisma.exam.findMany({
       where: {
@@ -274,6 +275,7 @@ export class ExamsService {
   }
 
   async getPublishedExams() {
+    await this.autoExpireExams();
     return this.prisma.exam.findMany({
       where: { status: 'PUBLISHED' },
       select: {
@@ -290,8 +292,9 @@ export class ExamsService {
   }
 
   async getExamByAccessCode(accessCode: string) {
+    await this.autoExpireExams();
     return this.prisma.exam.findUnique({
-      where: { accessCode },
+      where: { accessCode: accessCode.toUpperCase() },
       include: {
         questions: {
           include: {
@@ -306,8 +309,9 @@ export class ExamsService {
   }
 
   async createSession(accessCode: string, name: string, studentNumber: string, examPassword?: string) {
+    await this.autoExpireExams();
     const exam = await this.prisma.exam.findUnique({
-      where: { accessCode },
+      where: { accessCode: accessCode.toUpperCase() },
       include: { questions: { orderBy: { order: 'asc' } } }
     });
 
@@ -449,9 +453,21 @@ export class ExamsService {
         });
       }
 
-      const totalTestCases = testCasesToRun.length || 1;
-      const testCasePassRate = passedCount / totalTestCases;
-      const combinedRate = (testCasePassRate * 0.8) + (similarityRate * 0.2);
+      const totalTestCases = testCasesToRun.length;
+      let combinedRate = 0;
+      if (totalTestCases === 0) {
+        // If no test cases are defined, base the grade on semantic similarity
+        combinedRate = similarityRate;
+      } else {
+        const testCasePassRate = passedCount / totalTestCases;
+        if (testCasePassRate === 1.0) {
+          // A perfect execution match always gets full marks
+          combinedRate = 1.0;
+        } else {
+          // Otherwise, weight it: 80% test cases, 20% semantic similarity
+          combinedRate = (testCasePassRate * 0.8) + (similarityRate * 0.2);
+        }
+      }
       score = !isTestOnly ? Math.round(combinedRate * question.marks) : 0;
       details.testCases = testCaseResults;
       details.passedCount = passedCount;
@@ -742,6 +758,7 @@ export class ExamsService {
   }
 
   async getSessionsByAccessCode(accessCode: string, invigilatorPassword?: string) {
+    await this.autoExpireExams();
     const exam = await this.prisma.exam.findUnique({ where: { accessCode: accessCode.toUpperCase() } });
     if (!exam) {
       throw new NotFoundException('Exam not found');
@@ -784,45 +801,139 @@ export class ExamsService {
   }
 
   async getDashboardStats(lecturerId: string, institutionId?: string) {
-    const exams = await this.prisma.exam.findMany({
-      where: {
-        lecturerId,
-        institutionId,
-      },
-      include: {
-        examSessions: {
-          include: {
-            submissions: true,
-          },
-        },
-      },
+    await this.autoExpireExams();
+
+    const totalExams = await this.prisma.exam.count({
+      where: { lecturerId, institutionId }
+    });
+    const activeExams = await this.prisma.exam.count({
+      where: { lecturerId, institutionId, status: 'PUBLISHED' }
+    });
+    const draftExams = await this.prisma.exam.count({
+      where: { lecturerId, institutionId, status: 'DRAFT' }
     });
 
-    let activeSessions = 0;
-    let completedSessions = 0;
-    let totalWarnings = 0;
-    let pendingReviews = 0;
+    const activeSessions = await this.prisma.examSession.count({
+      where: {
+        exam: { lecturerId, institutionId },
+        status: 'ACTIVE'
+      }
+    });
+    const completedSessions = await this.prisma.examSession.count({
+      where: {
+        exam: { lecturerId, institutionId },
+        status: 'COMPLETED'
+      }
+    });
 
-    exams.forEach(exam => {
-      exam.examSessions.forEach(session => {
-        if (session.status === 'ACTIVE') activeSessions++;
-        if (session.status === 'COMPLETED') completedSessions++;
-        totalWarnings += session.warningCount || 0;
-        session.submissions.forEach(sub => {
-          if (sub.status === 'PENDING_REVIEW') pendingReviews++;
-        });
-      });
+    const warningsAgg = await this.prisma.examSession.aggregate({
+      where: {
+        exam: { lecturerId, institutionId }
+      },
+      _sum: {
+        warningCount: true
+      }
+    });
+    const warningCount = warningsAgg._sum.warningCount || 0;
+
+    const pendingReviews = await this.prisma.submission.count({
+      where: {
+        session: {
+          exam: { lecturerId, institutionId }
+        },
+        status: 'PENDING_REVIEW'
+      }
     });
 
     return {
-      totalExams: exams.length,
-      activeExams: exams.filter(e => e.status === 'PUBLISHED').length,
-      draftExams: exams.filter(e => e.status === 'DRAFT').length,
+      totalExams,
+      activeExams,
+      draftExams,
       activeSessions,
       completedSessions,
-      warningCount: totalWarnings,
+      warningCount,
       pendingReviews,
     };
+  }
+
+  async autoExpireExams() {
+    const now = new Date();
+    await this.prisma.exam.updateMany({
+      where: {
+        status: 'PUBLISHED',
+        endDateTime: {
+          lt: now,
+        },
+      },
+      data: {
+        status: 'ARCHIVED',
+      },
+    });
+  }
+
+  async remove(id: string, lecturerId: string) {
+    const exam = await this.findOne(id, lecturerId);
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      // Find all questions associated with this exam
+      const questions = await prisma.question.findMany({
+        where: { examId: id },
+        select: { id: true },
+      });
+      const questionIds = questions.map((q) => q.id);
+
+      // Delete test cases
+      await prisma.testCase.deleteMany({
+        where: { questionId: { in: questionIds } },
+      });
+
+      // Delete questions
+      await prisma.question.deleteMany({
+        where: { examId: id },
+      });
+
+      // Find sessions
+      const sessions = await prisma.examSession.findMany({
+        where: { examId: id },
+        select: { id: true },
+      });
+      const sessionIds = sessions.map((s) => s.id);
+
+      // Find submissions
+      const submissions = await prisma.submission.findMany({
+        where: { sessionId: { in: sessionIds } },
+        select: { id: true },
+      });
+      const submissionIds = submissions.map((sub) => sub.id);
+
+      // Delete results
+      await prisma.result.deleteMany({
+        where: { submissionId: { in: submissionIds } },
+      });
+
+      // Delete submissions
+      await prisma.submission.deleteMany({
+        where: { sessionId: { in: sessionIds } },
+      });
+
+      // Delete sessions
+      await prisma.examSession.deleteMany({
+        where: { examId: id },
+      });
+
+      // Delete activity logs
+      await prisma.activityLog.deleteMany({
+        where: { examId: id },
+      });
+
+      // Delete exam
+      return prisma.exam.delete({
+        where: { id },
+      });
+    });
   }
 
   async recordWarning(sessionId: string, warningType: string, message: string) {

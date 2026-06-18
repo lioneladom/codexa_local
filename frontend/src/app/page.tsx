@@ -13,13 +13,7 @@ export default function LecturerEntrancePage() {
   const [error, setError] = useState('');
   const router = useRouter();
 
-  // Redirect to dashboard if token exists
-  useEffect(() => {
-    const token = localStorage.getItem('codexa_token');
-    if (token) {
-      router.replace('/dashboard');
-    }
-  }, [router]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

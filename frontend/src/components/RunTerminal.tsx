@@ -11,15 +11,26 @@ interface Props {
   language: string;
   runId: number;
   timeLimitSec: number;
+  isRunning: boolean;
+  onExit: () => void;
 }
 
-export default function RunTerminal({ code, language, runId, timeLimitSec }: Props) {
+export default function RunTerminal({ code, language, runId, timeLimitSec, isRunning, onExit }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const onExitRef = useRef(onExit);
+  
+  // Keep onExit callback fresh
+  useEffect(() => {
+    onExitRef.current = onExit;
+  }, [onExit]);
 
+  // 1. Initialize Terminal once on mount
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Initialize XTerm
     const term = new XTerm({
       cursorBlink: true,
       convertEol: true,
@@ -36,13 +47,42 @@ export default function RunTerminal({ code, language, runId, timeLimitSec }: Pro
     term.loadAddon(fitAddon);
     term.open(containerRef.current);
     fitAddon.fit();
-    term.writeln('Connecting to execution sandbox...\r');
 
-    // Connect to WebSocket socket.io server
+    termRef.current = term;
+    fitAddonRef.current = fitAddon;
+
+    const handleResize = () => fitAddon.fit();
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      term.dispose();
+    };
+  }, []);
+
+  // 2. Handle Run / Stop lifecycle
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+
+    // Cleanup previous socket if any
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
+    if (!isRunning) {
+      return;
+    }
+
+    // Clear terminal for the new run
+    term.clear();
+    term.write('\x1b[H\x1b[2J'); // reset cursor position and clear screen
+
     const socket = io(getSocketUrl());
+    socketRef.current = socket;
 
     socket.on('connect', () => {
-      term.writeln('Sandbox connected. Executing code...\r');
       socket.emit('runCode', { code, language, timeLimitSec });
     });
 
@@ -51,31 +91,45 @@ export default function RunTerminal({ code, language, runId, timeLimitSec }: Pro
     });
 
     socket.on('terminalExit', (data: { code: number; signal?: string }) => {
-      term.writeln(`\r\nProgram execution completed (exit code: ${data.code}).\r`);
+      term.writeln(`\r\n\r\n[Process completed (exit code: ${data.code})]\r`);
       socket.disconnect();
+      socketRef.current = null;
+      onExitRef.current(); // notify parent that it stopped running
     });
 
     socket.on('connect_error', (err) => {
-      term.writeln(`\r\nSandbox connection failure: ${err.message}\r`);
+      term.writeln(`\r\n[Connection failure: ${err.message}]\r`);
+      socket.disconnect();
+      socketRef.current = null;
+      onExitRef.current();
     });
 
-    // Write input keys back to the spawned process
+    // Clean up socket listener when runId or isRunning changes
+    return () => {
+      if (socketRef.current) {
+        term.writeln('\r\n\r\n[Process terminated by user]\r');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [runId, isRunning, code, language, timeLimitSec]);
+
+  // 3. Handle terminal user input
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+
     const disposable = term.onData((data) => {
-      if (socket.connected) {
+      const socket = socketRef.current;
+      if (socket && socket.connected) {
         socket.emit('terminalInput', data);
       }
     });
 
-    const handleResize = () => fitAddon.fit();
-    window.addEventListener('resize', handleResize);
-
     return () => {
-      window.removeEventListener('resize', handleResize);
       disposable.dispose();
-      term.dispose();
-      socket.disconnect();
     };
-  }, [code, language, runId, timeLimitSec]);
+  }, [runId]); // Rebind input listener when run starts
 
   return (
     <div

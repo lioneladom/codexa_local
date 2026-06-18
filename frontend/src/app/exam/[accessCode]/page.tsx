@@ -41,6 +41,8 @@ interface Exam {
 
 export default function StudentExamPage({ params }: { params: { accessCode: string } }) {
   const [step, setStep] = useState<'entry' | 'exam' | 'completed'>('entry');
+  const [activeTab, setActiveTab] = useState<'questions' | 'details' | 'code'>('questions');
+  const [isQuestionsSidebarOpen, setIsQuestionsSidebarOpen] = useState(true);
   const [name, setName] = useState('');
   const [studentNumber, setStudentNumber] = useState('');
   const [password, setPassword] = useState('');
@@ -60,6 +62,115 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
   const [terminalRunId, setTerminalRunId] = useState(0);
   const [terminalRunning, setTerminalRunning] = useState(false);
 
+  // States for panel resizability and submit dialog
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [editorWidthPercent, setEditorWidthPercent] = useState(50);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  
+  const isResizingSidebar = useRef(false);
+  const isResizingEditor = useRef(false);
+  const lastSavedAnswersRef = useRef<any>(null);
+
+  const startResizeSidebar = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingSidebar.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const startResizeEditor = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingEditor.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+
+  // Resize handler listeners
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingSidebar.current) {
+        const newWidth = Math.max(160, Math.min(450, e.clientX));
+        setSidebarWidth(newWidth);
+      } else if (isResizingEditor.current) {
+        const workspaceLeft = isQuestionsSidebarOpen ? sidebarWidth : 0;
+        const totalWorkspaceWidth = window.innerWidth - workspaceLeft;
+        if (totalWorkspaceWidth > 0) {
+          const editorLeft = e.clientX - workspaceLeft;
+          const percentage = Math.max(20, Math.min(80, (editorLeft / totalWorkspaceWidth) * 100));
+          setEditorWidthPercent(100 - percentage);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizingSidebar.current = false;
+      isResizingEditor.current = false;
+      document.body.style.cursor = 'default';
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [sidebarWidth, isQuestionsSidebarOpen]);
+
+  // Debounced auto-save hook
+  useEffect(() => {
+    if (step !== 'exam' || !sessionId || !exam) return;
+
+    if (!lastSavedAnswersRef.current) {
+      lastSavedAnswersRef.current = JSON.parse(JSON.stringify(answers));
+      return;
+    }
+
+    const changedQuestionIds: string[] = [];
+    exam.questions.forEach((q) => {
+      const curr = answers[q.id];
+      const prev = lastSavedAnswersRef.current[q.id];
+      if (JSON.stringify(curr) !== JSON.stringify(prev)) {
+        changedQuestionIds.push(q.id);
+      }
+    });
+
+    if (changedQuestionIds.length === 0) return;
+
+    changedQuestionIds.forEach((id) => {
+      setSubmissionStatuses((prev) => ({ ...prev, [id]: 'SAVING' }));
+    });
+
+    const timer = setTimeout(async () => {
+      for (const qId of changedQuestionIds) {
+        const question = exam.questions.find((q) => q.id === qId);
+        if (!question) continue;
+
+        try {
+          const answerVal = answers[qId];
+          const res = await fetch(`${getApiUrl()}/exams/access/${params.accessCode}/submit-question`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId,
+              questionId: qId,
+              answer: answerVal,
+            }),
+          });
+          if (res.ok) {
+            setSubmissionStatuses((prev) => ({ ...prev, [qId]: 'SAVED' }));
+            if (lastSavedAnswersRef.current) {
+              lastSavedAnswersRef.current[qId] = JSON.parse(JSON.stringify(answerVal));
+            }
+          } else {
+            setSubmissionStatuses((prev) => ({ ...prev, [qId]: 'DRAFT' }));
+          }
+        } catch (e) {
+          setSubmissionStatuses((prev) => ({ ...prev, [qId]: 'DRAFT' }));
+        }
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [answers, step, sessionId, exam, params.accessCode]);
+
   // References to track current values during tab switches
   const sessionIdRef = useRef(sessionId);
   const warningCountRef = useRef(warningCount);
@@ -71,6 +182,12 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
   useEffect(() => {
     warningCountRef.current = warningCount;
   }, [warningCount]);
+
+  // Reset terminal console when switching questions
+  useEffect(() => {
+    setTerminalRunning(false);
+    setTerminalRunId(0);
+  }, [currentQuestionIndex]);
 
   // Fetch initial exam structure (anonymous access check)
   useEffect(() => {
@@ -134,6 +251,7 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
 
               setAnswers(initialAnswers);
               setSubmissionStatuses(initialStatuses);
+              lastSavedAnswersRef.current = JSON.parse(JSON.stringify(initialAnswers));
               setStep('exam');
               document.documentElement.requestFullscreen().catch(() => {});
             } else {
@@ -305,6 +423,7 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
 
       setAnswers(initialAnswers);
       setSubmissionStatuses(initialStatuses);
+      lastSavedAnswersRef.current = JSON.parse(JSON.stringify(initialAnswers));
       setStep('exam');
       document.documentElement.requestFullscreen().catch(() => {});
     } catch (err: any) {
@@ -344,10 +463,7 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
 
   // Complete exam session manual triggers
   const handleFinishExam = async () => {
-    const confirmSubmit = window.confirm('Are you sure you want to finalize and submit your examination paper? You will not be able to modify your answers after this.');
-    if (!confirmSubmit) return;
-
-    submitFinalExam();
+    setShowSubmitConfirm(true);
   };
 
   const autoSubmitExam = () => {
@@ -571,17 +687,17 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
       )}
 
       {/* Main Workspace Header */}
-      <header className="bg-[#0a0f24] text-white px-6 py-3 border-b border-[#1e295d] flex justify-between items-center shadow-md">
+      <header className="bg-[#0a0f24] text-white px-6 py-4 border-b border-[#1e295d] flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-md">
         <div>
           <h1 className="text-lg font-bold font-sans tracking-wide text-[#ffffff]">{exam?.title}</h1>
-          <div className="flex gap-3 text-xs text-slate-400 mt-0.5 font-mono">
+          <div className="flex flex-wrap gap-2 text-xs text-slate-400 mt-0.5 font-mono">
             <span>Course: {exam?.courseCode}</span>
             <span>•</span>
             <span>Candidate: {name} ({studentNumber})</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center justify-between md:justify-end gap-6 w-full md:w-auto">
           <div className="text-lg font-mono flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider text-slate-400">Time Left:</span>
             <span className={`font-bold px-3 py-1 rounded-lg ${timeLeft < 300 ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse' : 'bg-[#1b2554] border border-[#2b3a7a]'}`}>
@@ -589,53 +705,62 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
             </span>
           </div>
           
-          <button
-            onClick={handleFinishExam}
-            className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-all shadow-md"
-          >
-            Submit Exam
-          </button>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <span className="text-xs text-slate-400 font-mono">
+              {Object.values(submissionStatuses).includes('SAVING') ? 'Saving changes...' : 'All answers saved'}
+            </span>
+            <button
+              onClick={handleFinishExam}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-all shadow-md w-full md:w-auto"
+            >
+              Submit Exam
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Workspace Panel Split */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
         {/* Left Navigator Side */}
-        <aside className="w-72 bg-[#0d1430] border-r border-[#1e295d] p-4 flex flex-col justify-between overflow-y-auto">
+        <aside
+          style={{ width: isQuestionsSidebarOpen && typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${sidebarWidth}px` : undefined }}
+          className={`${
+            isQuestionsSidebarOpen ? 'lg:opacity-100' : 'lg:w-0 lg:opacity-0 lg:overflow-hidden lg:border-r-0'
+          } bg-[#0d1430] border-r border-[#1e295d] p-4 flex flex-col justify-between overflow-y-auto transition-all duration-300 ${
+            activeTab === 'questions' ? 'flex flex-1 w-full lg:flex-none' : 'hidden lg:flex'
+          }`}
+        >
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 font-mono">Questions</h2>
-            <div className="space-y-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4 font-mono">Questions</h2>
+            <div className="grid grid-cols-4 gap-2">
               {exam?.questions.map((q, idx) => {
                 const status = submissionStatuses[q.id] || 'DRAFT';
                 const isActive = idx === currentQuestionIndex;
+                const isSaved = status === 'SAVED';
 
-                let indicatorColor = 'bg-slate-500/25 text-slate-400';
-                if (status === 'SAVED') {
-                  indicatorColor = 'bg-accent/20 text-accent border border-accent/30';
+                let bgClass = 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800';
+                if (isActive) {
+                  bgClass = 'bg-primary border-accent text-white shadow-md ring-2 ring-accent/35';
+                } else if (isSaved) {
+                  bgClass = 'bg-emerald-950/45 border-emerald-500 text-emerald-300 hover:bg-emerald-950/60';
                 } else if (status === 'SAVING') {
-                  indicatorColor = 'bg-yellow-500/20 text-yellow-400 animate-pulse';
+                  bgClass = 'bg-yellow-950/45 border-yellow-500 text-yellow-300 animate-pulse';
                 }
 
                 return (
                   <button
                     key={q.id}
-                    onClick={() => setCurrentQuestionIndex(idx)}
-                    className={`w-full text-left p-3 rounded-xl transition-all flex justify-between items-center border ${
-                      isActive 
-                        ? 'bg-[#1b2554] border-accent text-white shadow-md' 
-                        : 'bg-transparent border-transparent text-slate-300 hover:bg-[#11193a]'
-                    }`}
+                    title={`${q.title} (${q.marks} marks)`}
+                    onClick={() => {
+                      setCurrentQuestionIndex(idx);
+                      if (window.innerWidth < 1024) {
+                        setActiveTab('details');
+                      }
+                    }}
+                    className={`aspect-square w-full rounded-xl transition-all flex flex-col items-center justify-center border font-mono font-semibold text-xs ${bgClass}`}
                   >
-                    <div>
-                      <div className="font-semibold text-sm">Q{idx + 1}</div>
-                      <div className="text-xs opacity-60 truncate max-w-[140px] mt-0.5">{q.title}</div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <span className="text-[10px] font-semibold">{q.marks}m</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono uppercase ${indicatorColor}`}>
-                        {status}
-                      </span>
-                    </div>
+                    <span>{idx + 1}</span>
+                    <span className="text-[9px] opacity-75 mt-0.5">{q.marks}m</span>
                   </button>
                 );
               })}
@@ -643,7 +768,7 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
           </div>
 
           {/* Security alerts log status */}
-          <div className="pt-4 border-t border-[#1e295d] text-xs text-slate-400">
+          <div className="pt-4 border-t border-[#1e295d] text-xs text-slate-400 mt-6">
             <div className="flex justify-between items-center">
               <span>Violations logged:</span>
               <span className={warningCount > 0 ? 'text-red-400 font-bold' : 'text-green-400'}>{warningCount}</span>
@@ -651,19 +776,76 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
           </div>
         </aside>
 
+        {isQuestionsSidebarOpen && (
+          <div
+            onMouseDown={startResizeSidebar}
+            className="hidden lg:block w-1 hover:w-1.5 bg-[#1e295d] hover:bg-accent cursor-col-resize transition-all h-full self-stretch select-none"
+          />
+        )}
+
         {/* Center / Right Content Panel */}
-        <main className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+          {/* Mobile Tab Selector */}
+          <div className="flex lg:hidden bg-[#0d1430] border-b border-[#1e295d] text-slate-300 font-mono select-none flex-shrink-0">
+            <button
+              onClick={() => setActiveTab('questions')}
+              className={`flex-1 py-3 text-center text-xs font-semibold border-b-2 transition-all ${
+                activeTab === 'questions' ? 'border-accent text-white bg-[#11193a]' : 'border-transparent text-slate-400'
+              }`}
+            >
+              Questions ({exam?.questions.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`flex-1 py-3 text-center text-xs font-semibold border-b-2 transition-all ${
+                activeTab === 'details' ? 'border-accent text-white bg-[#11193a]' : 'border-transparent text-slate-400'
+              }`}
+            >
+              Details
+            </button>
+            {currentQuestion && currentQuestion.type === 'PROGRAMMING' && (
+              <button
+                onClick={() => setActiveTab('code')}
+                className={`flex-1 py-3 text-center text-xs font-semibold border-b-2 transition-all ${
+                  activeTab === 'code' ? 'border-accent text-white bg-[#11193a]' : 'border-transparent text-slate-400'
+                }`}
+              >
+                Code & Run
+              </button>
+            )}
+          </div>
+
           {currentQuestion && (
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
               
               {/* Split left side: Question description */}
-              <div className="w-1/2 p-6 overflow-y-auto border-r border-[#e2e8f0] bg-white flex flex-col justify-between">
+              <div
+                style={{ width: currentQuestion.type === 'PROGRAMMING' && typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${100 - editorWidthPercent}%` : undefined }}
+                className={`w-full p-6 overflow-y-auto border-r border-[#e2e8f0] bg-white flex flex-col justify-between ${
+                  activeTab === 'details' ? 'flex flex-1 flex-col' : 'hidden lg:flex lg:flex-col'
+                }`}
+              >
                 <div>
                   <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
-                    <h2 className="text-xl font-bold text-[#0a0f24]">
-                      Q{currentQuestionIndex + 1}: {currentQuestion.title}
-                    </h2>
-                    <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs font-semibold">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsQuestionsSidebarOpen(!isQuestionsSidebarOpen)}
+                        className="hidden lg:block text-slate-500 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                        title={isQuestionsSidebarOpen ? "Hide Questions List" : "Show Questions List"}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {isQuestionsSidebarOpen ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                          )}
+                        </svg>
+                      </button>
+                      <h2 className="text-xl font-bold text-[#0a0f24]">
+                        Q{currentQuestionIndex + 1}: {currentQuestion.title}
+                      </h2>
+                    </div>
+                    <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0">
                       {currentQuestion.marks} Marks
                     </span>
                   </div>
@@ -773,19 +955,26 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
 
                 {/* Non-programming answer submit actions */}
                 {currentQuestion.type !== 'PROGRAMMING' && (
-                  <div className="pt-4 border-t border-slate-100 flex justify-end">
-                    <button
-                      onClick={() => handleSubmitAnswer(currentQuestion)}
-                      className="bg-accent hover:bg-accent/90 text-white font-semibold px-5 py-2.5 rounded-xl text-xs transition-all shadow-sm"
-                    >
-                      Save Answer
-                    </button>
+                  <div className="pt-4 border-t border-slate-100 flex justify-end mt-6 text-xs text-slate-400 font-mono">
+                    {submissionStatuses[currentQuestion.id] === 'SAVING' ? 'Saving changes...' : 'Response auto-saved'}
                   </div>
                 )}
               </div>
 
+              {currentQuestion.type === 'PROGRAMMING' && (
+                <div
+                  onMouseDown={startResizeEditor}
+                  className="hidden lg:block w-1 hover:w-1.5 bg-[#1e295d] hover:bg-accent cursor-col-resize transition-all h-full self-stretch select-none"
+                />
+              )}
+
               {/* Split right side: Monaco editor / run terminal (Only for PROGRAMMING) */}
-              <div className="w-1/2 flex flex-col overflow-hidden bg-slate-900">
+              <div
+                style={{ width: currentQuestion.type === 'PROGRAMMING' && typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${editorWidthPercent}%` : undefined }}
+                className={`w-full flex flex-col overflow-hidden bg-slate-900 ${
+                  activeTab === 'code' ? 'flex flex-1 flex-col' : 'hidden lg:flex lg:flex-col'
+                }`}
+              >
                 {currentQuestion.type === 'PROGRAMMING' ? (
                   <div className="flex-1 flex flex-col overflow-hidden">
                     {/* Editor header options */}
@@ -845,27 +1034,26 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
                           >
                             {terminalRunning ? 'Stop Code' : 'Run Code'}
                           </button>
-                          <button
-                            onClick={() => handleSubmitAnswer(currentQuestion)}
-                            className="bg-accent hover:bg-accent/90 text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm"
-                          >
-                            Submit Answer
-                          </button>
+                          <span className="text-xs text-slate-400 font-mono self-center">
+                            {submissionStatuses[currentQuestion.id] === 'SAVING' ? 'Saving...' : 'Auto-saved'}
+                          </span>
                         </div>
                       </div>
                       
                       {/* Console Body */}
                       <div className="flex-1 min-h-0 relative bg-[#060814]">
-                        {terminalRunning ? (
+                        {terminalRunId > 0 ? (
                           <RunTerminal
                             code={answers[currentQuestion.id]?.code || ''}
                             language={currentQuestion.language || 'javascript'}
                             runId={terminalRunId}
                             timeLimitSec={15}
+                            isRunning={terminalRunning}
+                            onExit={() => setTerminalRunning(false)}
                           />
                         ) : (
                           <div className="flex items-center justify-center h-full text-slate-500 text-xs font-mono">
-                            Press "Run Code" to compile and execute program in interactive console.
+                            Press &quot;Run Code&quot; to compile and execute program in interactive console.
                           </div>
                         )}
                       </div>
@@ -873,15 +1061,15 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
                   </div>
                 ) : (
                   /* Non programming instruction message */
-                  <div className="flex-1 flex items-center justify-center text-slate-500 text-sm p-8 text-center">
+                  <div className="flex-1 flex items-center justify-center text-slate-500 text-sm p-8 text-center bg-slate-900">
                     <div>
                       <div className="text-4xl mb-2 flex justify-center">
                         <svg className="w-12 h-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                       </div>
-                      <p>This is a text-based input question.</p>
-                      <p className="text-xs text-slate-600 mt-1">Please provide your solution in the left editor form panels.</p>
+                      <p className="text-slate-300">This is a text-based input question.</p>
+                      <p className="text-xs text-slate-500 mt-1">Please provide your solution in the left editor response panels.</p>
                     </div>
                   </div>
                 )}
@@ -891,6 +1079,40 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
           )}
         </main>
       </div>
+
+      {/* Submit Confirmation Modal */}
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 z-50 bg-[#000000]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0c102b] border border-[#1e295d] rounded-2xl max-w-md w-full p-6 shadow-2xl text-center text-white">
+            <div className="w-12 h-12 bg-amber-950 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-500/35">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-white">Finalize & Submit Exam</h3>
+            <p className="text-sm text-slate-300 mt-2">
+              Are you sure you want to submit your examination paper? You will not be able to modify your answers after this.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setShowSubmitConfirm(false)}
+                className="flex-1 px-4 py-2 bg-[#1b2554] border border-[#2b3a7a] text-slate-300 text-xs font-semibold rounded-xl hover:bg-[#2c3d82] transition-all"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => {
+                  setShowSubmitConfirm(false);
+                  submitFinalExam();
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl transition-all shadow-md"
+              >
+                Submit Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

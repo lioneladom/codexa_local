@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Delete,
   Param,
   UseGuards,
   Request,
@@ -85,6 +86,13 @@ export class ExamsController {
   @Roles('LECTURER', 'ADMIN')
   archive(@Param('id') id: string, @Request() req: any) {
     return this.examsService.archive(id, req.user.sub);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('LECTURER', 'ADMIN')
+  remove(@Param('id') id: string, @Request() req: any) {
+    return this.examsService.remove(id, req.user.sub);
   }
 
   @Post('access/:accessCode/session')

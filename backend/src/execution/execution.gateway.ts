@@ -45,12 +45,14 @@ export class ExecutionGateway {
         client.off('terminalInput', inputListener);
       }
 
-      // Terminate child process if still running
-      if (child && child.exitCode === null && child.signalCode === null) {
+      // Terminate child process group if still running
+      if (child && child.pid) {
         try {
-          child.kill('SIGKILL');
+          process.kill(-child.pid, 'SIGKILL');
         } catch (err) {
-          console.error('Failed to kill running process:', err);
+          try {
+            child.kill('SIGKILL');
+          } catch (e) {}
         }
       }
 
@@ -187,8 +189,19 @@ export class ExecutionGateway {
           return;
       }
 
-      // Spawn execution process
-      child = spawn(command, args, { cwd: workDir, env: { ...process.env, TERM: 'xterm-256color' } });
+      // Use script utility to allocate a pseudo-terminal (PTY) on Linux
+      const scriptCommand = 'script';
+      const cmdString = args.length > 0 
+        ? `${command} ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`
+        : command;
+      const scriptArgs = ['-e', '-q', '-c', cmdString, '/dev/null'];
+
+      // Spawn execution process in a new process group (detached: true)
+      child = spawn(scriptCommand, scriptArgs, { 
+        cwd: workDir, 
+        env: { ...process.env, TERM: 'xterm-256color' },
+        detached: true
+      });
 
       // Forward output streams to client
       child.stdout?.on('data', (chunk) => {

@@ -36,6 +36,7 @@ export default function InvigilatorPage({ params }: { params: { accessCode: stri
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [examInfo, setExamInfo] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'candidates' | 'feed'>('candidates');
   
   const [sessions, setSessions] = useState<ExamSession[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -277,16 +278,16 @@ export default function InvigilatorPage({ params }: { params: { accessCode: stri
 
   /* Screen 2: Real-time Monitor Desk */
   return (
-    <div className="flex flex-col h-screen bg-[#070b19] text-[#e2e8f0]">
+    <div className="flex flex-col h-screen bg-[#070b19] text-[#e2e8f0] overflow-hidden">
       {/* Header */}
-      <header className="bg-[#0c102b] border-b border-[#1e295d] px-6 py-4 flex justify-between items-center shadow-lg">
+      <header className="bg-[#0c102b] border-b border-[#1e295d] px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg flex-shrink-0">
         <div>
-          <h1 className="text-xl font-bold tracking-wide font-sans">{examInfo?.title}</h1>
+          <h1 className="text-xl font-bold tracking-wide font-sans text-white">{examInfo?.title}</h1>
           <p className="text-xs text-slate-400 mt-0.5 font-mono">
             Room Code: {params.accessCode.toUpperCase()} • Local Server Gateway
           </p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 w-full sm:w-auto justify-between sm:justify-end">
           <div className="bg-[#1b2554] border border-accent/40 rounded-xl px-4 py-2 text-xs font-semibold flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-accent animate-ping"></span>
             <span>Live Sync Connected</span>
@@ -294,10 +295,32 @@ export default function InvigilatorPage({ params }: { params: { accessCode: stri
         </div>
       </header>
 
+      {/* Mobile Tab Switcher */}
+      <div className="flex lg:hidden bg-[#0c102b] border-b border-[#1e295d] text-slate-300 font-mono select-none flex-shrink-0">
+        <button
+          onClick={() => setActiveTab('candidates')}
+          className={`flex-1 py-3 text-center text-xs font-semibold border-b-2 transition-all ${
+            activeTab === 'candidates' ? 'border-accent text-white bg-slate-800/40' : 'border-transparent text-slate-500'
+          }`}
+        >
+          Candidates ({sessions.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('feed')}
+          className={`flex-1 py-3 text-center text-xs font-semibold border-b-2 transition-all ${
+            activeTab === 'feed' ? 'border-accent text-white bg-slate-800/40' : 'border-transparent text-slate-500'
+          }`}
+        >
+          Live Feed ({activityLogs.length})
+        </button>
+      </div>
+
       {/* Main split dashboard pane */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
         {/* Left Side: Candidates Grid Status */}
-        <main className="w-2/3 p-6 overflow-y-auto border-r border-[#1e295d]">
+        <main className={`w-full lg:w-2/3 p-6 overflow-y-auto border-r border-[#1e295d] ${
+          activeTab === 'candidates' ? 'block' : 'hidden lg:block'
+        }`}>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 font-mono">
             Candidates List ({sessions.length})
           </h2>
@@ -365,7 +388,9 @@ export default function InvigilatorPage({ params }: { params: { accessCode: stri
         </main>
 
         {/* Right Side: Live Activity Feed */}
-        <aside className="w-1/3 p-6 overflow-y-auto bg-[#0a0f25]/50 flex flex-col">
+        <aside className={`w-full lg:w-1/3 p-6 overflow-y-auto bg-[#0a0f25]/50 flex flex-col ${
+          activeTab === 'feed' ? 'flex' : 'hidden lg:flex'
+        }`}>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4 font-mono">
             Live Room Feed
           </h2>
