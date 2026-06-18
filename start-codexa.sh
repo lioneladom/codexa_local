@@ -73,36 +73,58 @@ trap cleanup SIGINT SIGTERM EXIT
 echo "Waiting for servers to start..."
 sleep 4
 
-# 6. Get local IP address to show the lecturer
-# Find the interface with the default route first (handles internet-connected local networks)
-DEFAULT_INTERFACE=$(ip route show | grep default | head -n 1 | awk '{print $5}')
-LOCAL_IP=""
-if [ -n "$DEFAULT_INTERFACE" ]; then
-    LOCAL_IP=$(ip -4 addr show dev "$DEFAULT_INTERFACE" | grep -oP 'inet \K[\d.]+' | head -n 1)
-fi
-
-# Fallback if no default route exists (e.g. offline router/hotspot with no gateway)
-if [ -z "$LOCAL_IP" ]; then
-    # Find active non-virtual interfaces (wlan, eth, en, wl)
-    for iface in $(ip -o link show | awk -F': ' '{print $2}' | grep -E '^(wlan|wlp|eth|enp|en|wl)'); do
-        if ip link show "$iface" 2>/dev/null | grep -q "state UP"; then
-            LOCAL_IP=$(ip -4 addr show dev "$iface" | grep -oP 'inet \K[\d.]+' | head -n 1)
-            if [ -n "$LOCAL_IP" ]; then
-                break
-            fi
-        fi
-    done
-fi
-
-# Absolute fallback
-if [ -z "$LOCAL_IP" ]; then
-    LOCAL_IP=$(hostname -I | awk '{print $1}')
-fi
-
+# 6. Get local IP addresses to show the lecturer
 echo "============================================="
 echo "Codexa is now running!"
 echo "Lecturer Dashboard: http://localhost:3000"
-echo "Student Entrance (LAN): http://$LOCAL_IP:3000/exam/[code]"
+echo ""
+echo "Student Entrance (LAN) URLs:"
+
+# Find the interface with the default route
+DEFAULT_INTERFACE=$(ip route show | grep default | head -n 1 | awk '{print $5}')
+
+IP_FOUND=false
+while read -r line; do
+    iface=$(echo "$line" | awk '{print $1}')
+    ip=$(echo "$line" | awk '{print $2}')
+    
+    # Skip loopback
+    if [ "$iface" = "lo" ]; then
+        continue
+    fi
+    
+    # Categorize interface type for display clarity
+    if [[ "$iface" =~ ^(docker|br-|veth|virbr) ]]; then
+        type="Virtual/Docker"
+    elif [[ "$iface" =~ ^(wlan|wlp|wl|ap) ]]; then
+        type="Wi-Fi / Hotspot"
+    elif [[ "$iface" =~ ^(eth|enp|en) ]]; then
+        type="Ethernet / Wired"
+    else
+        type="Other network"
+    fi
+    
+    # Highlight the default interface
+    if [ "$iface" = "$DEFAULT_INTERFACE" ]; then
+        echo " - [DEFAULT] $type ($iface): http://$ip:3000/exam/[code]"
+    else
+        echo " - $type ($iface): http://$ip:3000/exam/[code]"
+    fi
+    IP_FOUND=true
+done < <(ip -4 -o addr show | awk '{split($4, a, "/"); print $2, a[1]}')
+
+if [ "$IP_FOUND" = false ]; then
+    FALLBACK_IP=$(hostname -I | awk '{print $1}')
+    if [ -n "$FALLBACK_IP" ]; then
+        echo " - Fallback: http://$FALLBACK_IP:3000/exam/[code]"
+    else
+        echo " - Local Host: http://localhost:3000/exam/[code]"
+    fi
+fi
+echo "============================================="
+echo "Note: If students cannot connect, ensure that your firewall"
+echo "allows incoming traffic on ports 3000 and 3002."
+echo "Example: sudo ufw allow 3000 && sudo ufw allow 3002"
 echo "============================================="
 echo "Opening Lecturer Dashboard in browser..."
 
