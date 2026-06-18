@@ -1047,7 +1047,7 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
                             code={answers[currentQuestion.id]?.code || ''}
                             language={currentQuestion.language || 'javascript'}
                             runId={terminalRunId}
-                            timeLimitSec={15}
+                            timeLimitSec={300}
                             isRunning={terminalRunning}
                             onExit={() => setTerminalRunning(false)}
                           />

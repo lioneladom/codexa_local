@@ -27,7 +27,7 @@ export class ExecutionGateway {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { code: string; language: string; timeLimitSec?: number },
   ) {
-    const { code, language, timeLimitSec = 10 } = payload;
+    const { code, language, timeLimitSec = 300 } = payload;
     const startTime = Date.now();
     const execId = Date.now().toString(36) + Math.random().toString(36).substring(2);
     const workDir = path.join(this.tempDir, execId);
