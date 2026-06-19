@@ -66,6 +66,7 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [editorWidthPercent, setEditorWidthPercent] = useState(50);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [showExamStoppedModal, setShowExamStoppedModal] = useState(false);
   
   const isResizingSidebar = useRef(false);
   const isResizingEditor = useRef(false);
@@ -161,6 +162,9 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
             }
           } else {
             setSubmissionStatuses((prev) => ({ ...prev, [qId]: 'DRAFT' }));
+            if (res.status === 403) {
+              setShowExamStoppedModal(true);
+            }
           }
         } catch (e) {
           setSubmissionStatuses((prev) => ({ ...prev, [qId]: 'DRAFT' }));
@@ -455,6 +459,9 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
         setSubmissionStatuses(prev => ({ ...prev, [question.id]: 'SAVED' }));
       } else {
         setSubmissionStatuses(prev => ({ ...prev, [question.id]: 'DRAFT' }));
+        if (res.status === 403) {
+          setShowExamStoppedModal(true);
+        }
       }
     } catch (e) {
       setSubmissionStatuses(prev => ({ ...prev, [question.id]: 'DRAFT' }));
@@ -1108,6 +1115,34 @@ export default function StudentExamPage({ params }: { params: { accessCode: stri
                 className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl transition-all shadow-md"
               >
                 Submit Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exam Stopped Modal */}
+      {showExamStoppedModal && (
+        <div className="fixed inset-0 z-[100] bg-[#000000]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0c102b] border border-red-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl text-center text-white">
+            <div className="w-12 h-12 bg-red-950 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/35">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-white">Exam Stopped by Invigilator</h3>
+            <p className="text-sm text-slate-300 mt-2">
+              This exam session has been terminated by the lecturer. Your current answers have been successfully captured and submitted.
+            </p>
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={() => {
+                  setShowExamStoppedModal(false);
+                  setStep('completed');
+                }}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl transition-all shadow-md"
+              >
+                Okay
               </button>
             </div>
           </div>

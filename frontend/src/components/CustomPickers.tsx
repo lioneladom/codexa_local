@@ -133,7 +133,14 @@ export function CustomDatePicker({ value, onChange, className = '', required = f
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 mt-2 z-50 bg-[#1e293b] border border-slate-700 text-white rounded-2xl w-[320px] shadow-2xl overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsOpen(false)}
+        >
+          <div
+            className="bg-[#1e293b] border border-slate-700 text-white rounded-2xl w-[320px] shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
           {/* Header */}
           <div className="bg-slate-900 p-5 border-b border-slate-800">
             <div className="text-slate-400 text-xs font-semibold tracking-wider">{getHeaderYear()}</div>
@@ -224,6 +231,7 @@ export function CustomDatePicker({ value, onChange, className = '', required = f
             </button>
           </div>
         </div>
+      </div>
       )}
     </div>
   );
@@ -440,7 +448,14 @@ export function CustomTimePicker({ value, onChange, className = '', required = f
       </div>
 
       {isOpen && (
-        <div className="absolute left-0 mt-2 z-50 bg-[#1e293b] border border-slate-700 text-white rounded-2xl w-[280px] shadow-2xl overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsOpen(false)}
+        >
+          <div
+            className="bg-[#1e293b] border border-slate-700 text-white rounded-2xl w-[280px] shadow-2xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
           {/* Header */}
           <div className="bg-slate-900 p-5 flex justify-center items-center gap-1 border-b border-slate-800">
             <button
@@ -526,6 +541,7 @@ export function CustomTimePicker({ value, onChange, className = '', required = f
             </button>
           </div>
         </div>
+      </div>
       )}
     </div>
   );

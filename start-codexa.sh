@@ -122,9 +122,14 @@ if [ "$IP_FOUND" = false ]; then
     fi
 fi
 echo "============================================="
-echo "Note: If students cannot connect, ensure that your firewall"
-echo "allows incoming traffic on ports 3000 and 3002."
-echo "Example: sudo ufw allow 3000 && sudo ufw allow 3002"
+echo "Note: If students cannot connect to the server:"
+echo "1. Wi-Fi / AP Isolation (Very common on Hostel/Public Wi-Fi):"
+echo "   Public/shared routers block local devices from communicating."
+echo "   Solution: Turn on your laptop's Mobile Hotspot and connect"
+echo "   the student devices/phones directly to it."
+echo "2. Firewall:"
+echo "   Ensure your firewall allows incoming traffic on ports 3000 & 3002."
+echo "   Linux: sudo ufw allow 3000/tcp && sudo ufw allow 3002/tcp"
 echo "============================================="
 echo "Opening Lecturer Dashboard in browser..."
 

@@ -267,6 +267,27 @@ export class ExamsService {
   async archive(id: string, lecturerId: string) {
     const exam = await this.findOne(id, lecturerId);
     
+    // Update all active exam sessions to COMPLETED when the exam is stopped by the lecturer
+    await this.prisma.examSession.updateMany({
+      where: {
+        examId: id,
+        status: 'ACTIVE',
+      },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    // Notify monitoring gateway that the exam has been stopped
+    try {
+      this.monitoringGateway.sendActivityToExam(id, 'EXAM_STOPPED', {
+        examId: id,
+      });
+    } catch (err) {
+      console.error('Failed to notify exam stopped:', err);
+    }
+
     return this.prisma.exam.update({
       where: { id },
       data: { status: 'ARCHIVED' },

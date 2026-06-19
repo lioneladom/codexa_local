@@ -61,6 +61,8 @@ export class ExecutionService {
       let args: string[];
       let filename: string;
 
+      const isWindows = os.platform() === 'win32';
+
       switch (language.toLowerCase()) {
         case 'javascript':
         case 'js':
@@ -88,14 +90,14 @@ export class ExecutionService {
           filename = 'main.cpp';
           await fs.writeFile(path.join(workDir, filename), code);
           await this.compileCpp(workDir, filename);
-          command = './a.out';
+          command = path.join(workDir, isWindows ? 'a.exe' : 'a.out');
           args = [];
           break;
         case 'c':
           filename = 'main.c';
           await fs.writeFile(path.join(workDir, filename), code);
           await this.compileC(workDir, filename);
-          command = './a.out';
+          command = path.join(workDir, isWindows ? 'a.exe' : 'a.out');
           args = [];
           break;
         case 'java':
@@ -111,7 +113,7 @@ export class ExecutionService {
           filename = 'Program.cs';
           await fs.writeFile(path.join(workDir, filename), code);
           await this.compileCSharp(workDir, filename);
-          command = './Program';
+          command = path.join(workDir, isWindows ? 'Program.exe' : 'Program');
           args = [];
           break;
         case 'go':
@@ -119,7 +121,7 @@ export class ExecutionService {
           filename = 'main.go';
           await fs.writeFile(path.join(workDir, filename), code);
           await this.compileGo(workDir, filename);
-          command = './main';
+          command = path.join(workDir, isWindows ? 'main.exe' : 'main');
           args = [];
           break;
         default:
@@ -147,7 +149,9 @@ export class ExecutionService {
   }
 
   private async compileCpp(workDir: string, filename: string): Promise<void> {
-    const { stderr } = await execFileAsync('g++', [filename, '-o', 'a.out'], {
+    const isWindows = os.platform() === 'win32';
+    const outputName = isWindows ? 'a.exe' : 'a.out';
+    const { stderr } = await execFileAsync('g++', [filename, '-o', outputName], {
       cwd: workDir,
       timeout: 10000,
     });
@@ -163,7 +167,9 @@ export class ExecutionService {
   }
 
   private async compileC(workDir: string, filename: string): Promise<void> {
-    const { stderr } = await execFileAsync('gcc', [filename, '-o', 'a.out'], {
+    const isWindows = os.platform() === 'win32';
+    const outputName = isWindows ? 'a.exe' : 'a.out';
+    const { stderr } = await execFileAsync('gcc', [filename, '-o', outputName], {
       cwd: workDir,
       timeout: 10000,
     });
@@ -171,7 +177,10 @@ export class ExecutionService {
   }
 
   private async compileCSharp(workDir: string, filename: string): Promise<void> {
-    const { stderr } = await execFileAsync('mcs', [filename, '-out:Program'], {
+    const isWindows = os.platform() === 'win32';
+    const outputName = isWindows ? 'Program.exe' : 'Program';
+    const compiler = isWindows ? 'csc' : 'mcs';
+    const { stderr } = await execFileAsync(compiler, [filename, `-out:${outputName}`], {
       cwd: workDir,
       timeout: 10000,
     });
@@ -179,7 +188,9 @@ export class ExecutionService {
   }
 
   private async compileGo(workDir: string, filename: string): Promise<void> {
-    const { stderr } = await execFileAsync('go', ['build', '-o', 'main', filename], {
+    const isWindows = os.platform() === 'win32';
+    const outputName = isWindows ? 'main.exe' : 'main';
+    const { stderr } = await execFileAsync('go', ['build', '-o', outputName, filename], {
       cwd: workDir,
       timeout: 10000,
     });
